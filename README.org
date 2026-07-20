@@ -1,0 +1,67 @@
+#+TITLE: Mail Server Management Scripts
+
+Postfix (SMTP) + Dovecot (IMAP/Sieve) management scripts. Copy
+=domainlist.example= to =domainlist= and put your mail domain in it
+(gitignored) before running anything in =accounts/=.
+
+*=diagnostics/=* — server-level maintenance and health checks, not tied to one mailbox
+- ~fix-mail-cert.sh <old-domain> <new-domain>~ — repoints Dovecot/Postfix TLS from one cert to another
+- ~mail-forward.sh {list|set|remove}~ — manages ~/etc/postfix/virtual~ forwarding/aliases safely (backup + postmap + reload every time)
+- ~whitelist-ip.sh <ip>~ — permanently whitelists an IP in fail2ban (all jails) so it's never banned
+- ~mail-diag.sh~ — dumps users file, config validity, recent logs, and fail2ban status to ~mail-diag-output.txt~ in this same folder
+- ~mail-flags.sh [search-term] [hours-back]~ — troubleshoots inbound mail that never arrives: banned IPs, ban/unban history, postfix reject/bounce/hold/discard lines, and mail auto-filed to Junk by Sieve
+- ~whitelist-postscreen.sh <cidr> ["description"]~ — adds a CIDR range to postscreen's access list so matching IPs skip the DNSBL/pregreet/pipelining tests entirely
+- ~backup-configs.sh~ — backs up real configs into ~backups/<timestamp>/~ (gitignored), including rspamd's local.d/ and the Dovecot autolearn config
+
+*=rspamd/=* — moves spam filtering from SpamAssassin to rspamd (milter-based, redis-backed Bayes + greylisting, real-time IMAPSieve autolearn). Numbered scripts, meant to be run once in order against an existing Postfix+Dovecot+OpenDKIM setup; each backs up whatever config it touches first and refuses to reload a service on a config that fails validation. ~06-verify.sh~ and ~07-test-email.sh~ are safe to re-run any time afterward as health checks. Written against one specific server's setup (assumed OpenDKIM milter, spamass-milter tagging into a Sieve rule) — read ~rspamd/README.md~ and adjust the hardcoded ports/paths before running elsewhere.
+- ~00-detect.sh~ — read-only report of the current milter/Sieve wiring
+- ~01-install-rspamd.sh~ — official rspamd apt repo, installs rspamd + redis
+- ~02-configure-rspamd.sh~ — redis backend, greylisting, milter proxy worker, extended spam headers
+- ~03-configure-postfix.sh~ — rewires ~smtpd_milters~ to include rspamd, drops the old milter
+- ~04-disable-spamassassin.sh [--purge]~ — stops/disables the old spam daemons, optionally removes the packages
+- ~05-dovecot-autolearn.sh~ — repoints the Sieve Junk rule at rspamd's headers, wires up IMAPSieve so moving mail into/out of Junk trains Bayes live
+- ~06-verify.sh~ — read-only health check: services, milter chain, rspamd stats, GTUBE test, memory
+- ~07-test-email.sh <recipient> [--ham]~ — sends a real message through the full milter chain and reports whether it landed correctly
+- ~optional/10-strict-smtp-hardening.sh~, ~optional/11-tls-auth-hardening.sh~ — separate, read the header comments first (real behavior changes)
+
+*=accounts/=* — per-mailbox lifecycle: invites, creation, password reset/recovery, deletion
+- ~invite-user.sh <name> <send-to-email>~ — creates an invite token and emails the signup link
+- ~list-invites.sh~ — lists pending invite tokens with age and expiry
+- ~add-mail-user.sh <user@domain>~ — directly creates a mailbox (prompts for password), bypassing the invite flow
+- ~reset-mail-password.sh <user@domain>~ — resets any mailbox password (prompts for it directly, never touches plaintext elsewhere)
+- ~recover-mail-password.sh <user@domain> <send-to-email>~ — generates a random password for a locked-out account and emails it to a recovery address
+- ~del-mail-user.sh <username>~ — deletes a mailbox, with a confirmation prompt since it's irreversible
+- ~dump-invite-scripts.sh~ — read-only recon: dumps the root-owned invite/add-user/del-user scripts, sudoers entries, pending tokens, crontab, and cleanup log for review
+- ~invite.php~ — web signup page redeemed by the token from ~invite-user.sh~; lets the invitee pick their own username, checks availability, collects a recovery email
+- ~forgot-password.php~ / ~reset-password.php~ — self-service password reset: request a link mailed to the recovery address on file, then set a new password. Same response either way, so it can't be used to enumerate accounts.
+- ~mail-reset-password.sh~ — root-owned, deployed to ~/usr/local/bin~, called via sudo from ~reset-password.php~ (not admin-run) to safely rewrite a mailbox's password hash, ACL-preserving
+- ~setup-password-reset-dir.sh~ — one-time bootstrap for ~/var/lib/mail-password-resets~
+- ~list-password-resets.sh~ — lists pending password-reset tokens with age and validity
+- ~deploy-web-pages.sh~ — deploys invite.php/forgot-password.php/reset-password.php/index.html to the live docroot; lints PHP first, backs up whatever's currently live
+
+* Example configs
+
+Sanitized templates in =examples/=, domain replaced with example.com:
+- ~postfix-main.cf~, ~postfix-virtual~, ~dovecot-users~, ~dovecot-sieve-default.sieve~, ~fail2ban-jail.local~, ~nftables.conf~, ~postscreen_access.cidr~, ~sudoers-mail-scripts~, ~mailname~, ~root-crontab~
+- ~rspamd-redis.conf~, ~rspamd-greylist.conf~, ~rspamd-worker-proxy.inc~, ~rspamd-milter_headers.conf~ — rspamd's local.d/ overrides
+- ~dovecot-91-rspamd-training.conf~, ~dovecot-sieve-learn-spam.sieve~, ~dovecot-sieve-learn-ham.sieve~ — IMAPSieve autolearn wiring
+
+* Requirements
+
+- Debian-family host, Postfix + Dovecot + fail2ban + postscreen already installed
+- A root-owned invite/add-user/del-user/reset-password script quartet under ~/usr/local/bin/~ (see ~examples/sudoers-mail-scripts~ for the sudo grants ~invite.php~ and ~reset-password.php~ need)
+- ~/var/lib/mail-invites~ (invite tokens), ~/var/lib/mail-recovery~ (recovery emails), and ~/var/lib/mail-password-resets~ (reset tokens) writable by ~www-data~
+- ~mail~ (mailutils) for sending invite/recovery/reset emails through the box's own Postfix
+
+* Self-service password reset
+
+~forgot-password.php~ looks up the mailbox's recovery email (collected at signup by ~invite.php~) and, if one is on file, emails a one-time link — valid 60 minutes — to ~reset-password.php~. Tokens live in ~/var/lib/mail-password-resets/<token>~ (mailbox on line 1, expiry unix timestamp on line 2); requesting a new one invalidates any of that mailbox's outstanding tokens. ~reset-password.php~ checks the embedded expiry itself, so it doesn't depend solely on a timely cron sweep — the sweep (~examples/root-crontab~) is just cleanup. Applying the new password goes through ~mail-reset-password.sh~, the same passwordless-sudo pattern as account creation. Accounts with no recovery email on file (e.g. created before this feature existed) can't use this flow.
+
+* Inbound mail rejected from a large sender (Gmail/iCloud/Microsoft 365)
+
+~postscreen~ gives any never-before-seen IP one automatic ~450 4.3.2~ temp-fail
+to filter spambots that don't retry (~PASS NEW~ in the log confirms this).
+Senders with a huge, fast-rotating outbound IP pool can get stuck retrying
+forever without ever landing on a cached IP. Diagnose with ~mail-flags.sh~;
+fix by whitelisting the sender's published range (check their SPF record)
+with ~whitelist-postscreen.sh~.

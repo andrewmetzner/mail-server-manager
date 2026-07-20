@@ -1,0 +1,6 @@
+# Example root crontab
+MAILTO="admin@example.com"
+
+0 * * * * /usr/bin/find /var/lib/mail-invites/ -type f -mmin +2880 -delete
+*/15 * * * * /usr/bin/find /var/lib/mail-password-resets/ -type f -mmin +65 -delete
+0 3 * * * /usr/local/sbin/spam-bayes-train.sh

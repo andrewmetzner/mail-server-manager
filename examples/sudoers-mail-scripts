@@ -1,0 +1,3 @@
+# Example /etc/sudoers.d/mail-scripts
+www-data ALL=(ALL) NOPASSWD: /usr/local/bin/mail-add-user.sh
+www-data ALL=(ALL) NOPASSWD: /usr/local/bin/mail-reset-password.sh

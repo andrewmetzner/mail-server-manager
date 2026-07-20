@@ -1,0 +1,22 @@
+# Example /etc/fail2ban/jail.local
+
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1
+
+[sshd]
+enabled = true
+
+[postfix]
+enabled = true
+port = smtp,submission
+logpath = %(syslog_mail)s
+
+[dovecot]
+enabled = true
+port = imap,imaps,pop3,pop3s,submission
+logpath = %(syslog_mail)s
+
+[sasl]
+enabled = true
+port = smtp,submission
+logpath = %(syslog_mail)s

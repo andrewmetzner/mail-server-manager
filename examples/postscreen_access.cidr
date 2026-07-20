@@ -1,0 +1,2 @@
+# Example /etc/postfix/postscreen_access.cidr
+57.103.64.0/18  permit

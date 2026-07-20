@@ -1,0 +1,4 @@
+# Example /etc/dovecot/users
+
+alice@example.com:{SHA512-CRYPT}$6$REPLACE$WITH2$REAL2$HASHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:vmail:vmail::/var/mail/vmail/example.com/alice/:userdb_quota_rule=*:storage=1G
+bob@example.com:{SHA512-CRYPT}$6$REPLACE$WITH2$REAL2$HASHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:vmail:vmail::/var/mail/vmail/example.com/bob/:userdb_quota_rule=*:storage=1G

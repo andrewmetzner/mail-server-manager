@@ -1,0 +1,5 @@
+domainlist
+backups/
+diagnostics/msg*.txt
+diagnostics/mail-diag-output.txt
+accounts/invite-scripts-dump.txt

@@ -1,0 +1,4 @@
+# Example /etc/postfix/virtual
+
+mailbox1@example.com    mailbox1@example.com, backup@gmail.com
+forward-only@example.com    someone-else@example.com
